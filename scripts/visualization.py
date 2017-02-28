@@ -7,7 +7,7 @@ from visualization_msgs.msg import Marker
 
 class Visualizer:
     def __init__(self):
-        rospy.init_node('test_marker', anonymous=True)
+        rospy.init_node('visualizer', anonymous=True)
         self.pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
         self.truck = TruckModel()
 
