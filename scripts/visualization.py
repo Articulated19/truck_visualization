@@ -29,9 +29,10 @@ class TruckModel:
 
         self.header.lifetime = rospy.Duration(0)
         
-        self.header.scale.x = 1.0
-        self.header.scale.y = 2.0
-        self.header.scale.z = 0.5
+        # Truck measurments in meters
+        self.header.scale.x = 0.19
+        self.header.scale.y = 0.42
+        self.header.scale.z = 0.22
 
         self.header.color.r = 1.0
         self.header.color.g = 0.0
@@ -40,7 +41,7 @@ class TruckModel:
         
         self.header.pose.position.x = 0.0
         self.header.pose.position.y = 0.0
-        self.header.pose.position.z = 0.25
+        self.header.pose.position.z = 0.11
         
         self.setDirection(45)
 
