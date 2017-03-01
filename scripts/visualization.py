@@ -4,16 +4,22 @@ import math
 import tf
 
 from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Pose
 
 class Visualizer:
     def __init__(self):
         rospy.init_node('visualizer', anonymous=True)
-        self.pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
+        rospy.Subscriber('sim_pose', Pose, self.poseCallback)
+        self.pub = rospy.Publisher('truck_marker', Marker, queue_size=10)
         self.truck = TruckModel()
 
         while not rospy.is_shutdown():
             self.pub.publish(self.truck.getMarker())
+            print self.truck.getMarker()
             rospy.sleep(0.02)
+
+    def poseCallback(self, msg):
+        self.truck.setPose(msg)
 
 class TruckModel:
     def __init__(self):
@@ -30,9 +36,9 @@ class TruckModel:
         self.header.lifetime = rospy.Duration(0)
         
         # Truck measurments in meters
-        self.header.scale.x = 0.19
-        self.header.scale.y = 0.42
-        self.header.scale.z = 0.22
+        self.header.scale.x = 420
+        self.header.scale.y = 190
+        self.header.scale.z = 220
 
         self.header.color.r = 1.0
         self.header.color.g = 0.0
@@ -48,8 +54,11 @@ class TruckModel:
     def getMarker(self):
         return self.header
 
-    def setPosition(self, pos):
-        self.header.pose.position = pos
+    def setPose(self, pose):
+        self.header.pose = pose
+
+    def setPosition(self, position):
+        self.header.pose.position = position
 
     # Takes angle in degrees and sets the direction of the marker
     def setDirection(self, angle):
@@ -61,11 +70,4 @@ class TruckModel:
 
 if __name__=="__main__":
     Visualizer()
-
-   
-
     
-
-
-
-
