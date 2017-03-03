@@ -12,22 +12,28 @@ from nav_msgs.msg import Path
 class Visualizer:
     def __init__(self):
         rospy.init_node('visualizer', anonymous=True)
-        rospy.Subscriber('sim_pose', Pose, self.poseCallback)
+        rospy.Subscriber('sim_header_pose', Pose, self.headerPoseCallback)
+        rospy.Subscriber('sim_trailer_pose', Pose, self.trailerPoseCallback)
         self.pub = rospy.Publisher('truck_marker', Marker, queue_size=10)
         self.truck = TruckModel()
         self.path = TruckPath()
         rospy.spin()
 
-    def poseCallback(self, msg):
-        self.truck.setPose(msg)
+    def trailerPoseCallback(self, msg):
+        self.truck.setTrailerPose(msg)
+        markers = self.truck.getMarkers()
+        self.pub.publish(markers[1])
+    
+    def headerPoseCallback(self, msg):
+        self.truck.setHeaderPose(msg)
         markers = self.truck.getMarkers()
         self.pub.publish(markers[0])
-        self.pub.publish(markers[1])
+
         self.path.pub.publish(self.path.path)
         
 class TruckPath:
     def __init__(self):
-        self.points = [(0,0,0)]
+        self.points = []
         self.pub = rospy.Publisher('sim_path', Path, queue_size=10)
         self.createPath('/../path.txt')
 
@@ -83,9 +89,10 @@ class TruckModel:
         self.header.scale.y = 190
         self.header.scale.z = 220
 
-        self.header.color.r = 0.75
-        self.header.color.g = 0.75
-        self.header.color.b = 0.75
+        # sick blue color
+        self.header.color.r = 0.1294117647
+        self.header.color.g = 0.58823529411
+        self.header.color.b = 0.95294117647
         self.header.color.a = 1.0
         
         self.header.pose.position.x = 0.0
@@ -106,13 +113,14 @@ class TruckModel:
         self.trailer.lifetime = rospy.Duration(0)
         
         # Truck measurments in mm
-        self.trailer.scale.x = 420
+        self.trailer.scale.x = 1000
         self.trailer.scale.y = 190
         self.trailer.scale.z = 220
 
-        self.trailer.color.r = 0.75
-        self.trailer.color.g = 0.75
-        self.trailer.color.b = 0.75
+        # sick red color
+        self.trailer.color.r = 0.956862745
+        self.trailer.color.g = 0.26274509803
+        self.trailer.color.b = 0.21176470588
         self.trailer.color.a = 1.0
         
         self.trailer.pose.position.x = 0.0
@@ -124,11 +132,17 @@ class TruckModel:
     def getMarkers(self):
         return [self.header, self.trailer]
 
-    def setPose(self, pose):
+    def setHeaderPose(self, pose):
         theta = tf.transformations.euler_from_quaternion((pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w))[2]
         pose.position.x = pose.position.x + (self.header.scale.x/2) * math.cos(theta)
         pose.position.y = pose.position.y + (self.header.scale.x/2) * math.sin(theta)
         self.header.pose = pose
+
+    def setTrailerPose(self, pose):
+        theta = tf.transformations.euler_from_quaternion((pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w))[2]
+        pose.position.x = pose.position.x + (self.trailer.scale.x/2) * math.cos(theta)
+        pose.position.y = pose.position.y + (self.trailer.scale.x/2) * math.sin(theta)
+        self.trailer.pose = pose
 
     def setPosition(self, position):
         self.header.pose.position = position
