@@ -8,28 +8,59 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Pose, PoseStamped
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Path
+from custom_msgs.msg import TruckState
 
 class Visualizer:
     def __init__(self):
-        rospy.init_node('visualizer', anonymous=True)
-        rospy.Subscriber('sim_header_pose', Pose, self.headerPoseCallback)
-        rospy.Subscriber('sim_trailer_pose', Pose, self.trailerPoseCallback)
+        rospy.init_node('visualizer')
+        # rospy.Subscriber('sim_header_pose', Pose, self.headerPoseCallback)
+        # rospy.Subscriber('sim_trailer_pose', Pose, self.trailerPoseCallback)
+        rospy.Subscriber('truck_state', TruckState, self.stateCallback)
         self.pub = rospy.Publisher('truck_marker', Marker, queue_size=10)
         self.truck = TruckModel()
         self.path = TruckPath()
         rospy.spin()
 
-    def trailerPoseCallback(self, msg):
-        self.truck.setTrailerPose(msg)
-        markers = self.truck.getMarkers()
-        self.pub.publish(markers[1])
-    
-    def headerPoseCallback(self, msg):
-        self.truck.setHeaderPose(msg)
-        markers = self.truck.getMarkers()
-        self.pub.publish(markers[0])
+    def stateCallback(self, msg):
+        pose = self.posToPose(msg.p, msg.theta)
+        self.truck.setHeaderPose(pose)
 
+        trailerpose = self.poseToTrailerPose(pose, self.truck.trailer.trailerlength, msg.theta2)
+        self.truck.setTrailerPose(trailerpose)
+
+        markers = self.truck.getMarkers()
+
+        self.pub.publish(markers[0])
+        self.pub.publish(markers[1])
         self.path.pub.publish(self.path.path)
+
+    # def trailerPoseCallback(self, msg):
+    #     self.truck.setTrailerPose(msg)
+    #     markers = self.truck.getMarkers()
+    #     self.pub.publish(markers[1])
+    
+    # def headerPoseCallback(self, msg):
+    #     self.truck.setHeaderPose(msg)
+    #     markers = self.truck.getMarkers()
+    #     self.pub.publish(markers[0])
+
+
+    
+    def posToPose(self, pos, theta):
+        q = self.thetaToQuat(theta)
+        p = Point(pos.x, pos.y, 110)
+        pose = Pose(p, q)
+        return pose
+
+    def poseToTrailerPose(self, pose, trailerlength, theta):
+        pose.position.x = pose.position.x - trailerlength * math.cos(theta)
+        pose.position.y = pose.position.y + trailerlength * math.sin(theta)
+        pose.orientation = self.thetaToQuat(theta)
+        return pose
+    
+    def thetaToQuat(self, theta):
+        quat = tf.transformations.quaternion_about_axis(-theta, (0,0, 1))
+        return Quaternion(quat[0], quat[1], quat[2], quat[3])
         
 class TruckPath:
     def __init__(self):
