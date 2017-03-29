@@ -7,6 +7,7 @@ from threading import Thread
 from os.path import dirname, abspath
 import numpy as np
 import sys
+from std_msgs.msg import Int8
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PointStamped
 from nav_msgs.msg import Path, OccupancyGrid, MapMetaData
@@ -32,9 +33,9 @@ class Visualizer:
         self.goals = []
         
         self.truck = TruckModel()
-        self.mapmodel = MapModel()
-        
         self.map_obj = Map()
+        self.mapmodel = MapModel(self.map_obj)
+        
         
         self.width = self.mapmodel.width * self.mapmodel.resolution
         self.height = self.mapmodel.height * self.mapmodel.resolution
@@ -42,6 +43,7 @@ class Visualizer:
         rospy.Subscriber('truck_state', TruckState, self.stateCallback)
         rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
         
+        rospy.Subscriber('alg_startend',cm.Path, self.algStartEndCallback)
         
         rospy.Subscriber('long_path', cm.Path, self.longPathCallback)
         rospy.Subscriber('ref_path', cm.Path, self.refPathCallback)
@@ -59,12 +61,42 @@ class Visualizer:
         self.path_pub = rospy.Publisher("truck_path", Path, queue_size=10)
         self.ref_path_pub = rospy.Publisher("truck_ref_path", Path, queue_size=10)
         self.long_path_pub = rospy.Publisher("truck_long_path", Path, queue_size=10)
+        self.endpoint_pub = rospy.Publisher("end_point", PointStamped, queue_size=10)
+        self.startpoint_pub = rospy.Publisher("start_point", PointStamped, queue_size=10)
         
         rospy.sleep(2)
         self.map_pub.publish(self.mapmodel.map)
         
+    def algStartEndCallback(self, data):
+        p = data.path
+        
+        s = PointStamped()
+        s.header.frame_id = "truck"
+        s.point.x = p[0].x
+        s.point.y = self.height - p[0].y
+        
+        self.startpoint_pub.publish(s)
+        
+        e = PointStamped()
+        e.header.frame_id = "truck"
+        e.point.x = p[1].x
+        e.point.y = self.height - p[1].y
+        
+        self.endpoint_pub.publish(e)
+        
+        
+    
     def mapUpdateHandler(self, data):
-        pass
+        obst = data.data
+        add = self.map_obj.addObstacle(obst)
+        if not add:
+            rem = self.map_obj.removeObstacle(obst)
+            if not rem:
+                print "can't add or remove obstacle"
+                
+        self.mapmodel = MapModel(self.map_obj)
+        self.map_pub.publish(self.mapmodel.map)
+
         
     def pointClickedCallback(self, data):
         p = data.point
@@ -240,7 +272,7 @@ class TruckModel:
         self.header.pose.orientation.w = quat[3]
 
 class MapModel:
-    def __init__(self):
+    def __init__(self, map_obj):
         
         stamp = rospy.Time.now()
 
@@ -255,7 +287,7 @@ class MapModel:
         # cell (0,0) in the map.
         origin = Pose(Point(0,0,0), Quaternion(0,0,0,0))
 
-        mapFromImg, self.resolution = Map().getMapAndScale()
+        mapFromImg, self.resolution = map_obj.getMapAndScale()
         
         mapFromImg = mapFromImg[::-1]
         
