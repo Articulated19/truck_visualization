@@ -6,117 +6,159 @@ import os
 from threading import Thread
 from os.path import dirname, abspath
 import numpy as np
-import cv2
-
+import sys
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion
+from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PointStamped
 from nav_msgs.msg import Path, OccupancyGrid, MapMetaData
 from custom_msgs.msg import TruckState, Position
 import custom_msgs.msg as cm 
+import cv2
 
-MAP_PATH = "/map.png"
+p = os.path.abspath(os.path.dirname(__file__))
+lib_path = os.path.abspath(os.path.join(p, '..', '..', 'truck_map', 'scripts'))
+sys.path.append(lib_path)
+from map_func import *
+
+
+#lib_path = os.path.abspath(os.path.join('..', '..', '..', 'lib'))
+#sys.path.append(lib_path)
+
+#import mymodule
 
 class Visualizer:
     def __init__(self):
         rospy.init_node('visualizer')
+        
+        self.goals = []
+        
         self.truck = TruckModel()
-        self.path = TruckPath()
-        self.map = MapModel()
-        # rospy.Subscriber('sim_header_pose', Pose, self.headerPoseCallback)
-        # rospy.Subscriber('sim_trailer_pose', Pose, self.trailerPoseCallback)
+        self.mapmodel = MapModel()
+        
+        self.map_obj = Map()
+        
+        self.width = self.mapmodel.width * self.mapmodel.resolution
+        self.height = self.mapmodel.height * self.mapmodel.resolution
+        
         rospy.Subscriber('truck_state', TruckState, self.stateCallback)
-        self.pub = rospy.Publisher('truck_marker', Marker, queue_size=10)
-        rospy.spin()
-
+        rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
+        
+        
+        rospy.Subscriber('long_path', cm.Path, self.longPathCallback)
+        rospy.Subscriber('ref_path', cm.Path, self.refPathCallback)
+        
+        rospy.Subscriber('clicked_point', PointStamped, self.pointClickedCallback)
+        rospy.Subscriber('move_base_simple/goal', PoseStamped, self.goalPointCallback)
+        
+        
+        rospy.Subscriber('map_updated', Int8, self.mapUpdateHandler)
+        
+        
+        self.goal_pub = rospy.Publisher('truck_goals', cm.Path, queue_size=10)
+        self.truck_pub = rospy.Publisher('truck_marker', Marker, queue_size=10)
+        self.map_pub = rospy.Publisher("truck_map", OccupancyGrid, queue_size=10)
+        self.path_pub = rospy.Publisher("truck_path", Path, queue_size=10)
+        self.ref_path_pub = rospy.Publisher("truck_ref_path", Path, queue_size=10)
+        self.long_path_pub = rospy.Publisher("truck_long_path", Path, queue_size=10)
+        
+        rospy.sleep(2)
+        self.map_pub.publish(self.mapmodel.map)
+        
+    def mapUpdateHandler(self, data):
+        pass
+        
+    def pointClickedCallback(self, data):
+        p = data.point
+        self.goals.append((p.x, p.y))
+        
+    def goalPointCallback(self, data):
+        p = data.pose.position
+        self.goals.append((p.x, p.y))
+        
+        gm = [cm.Position(x,self.height - y) for x,y in self.goals]
+        self.goal_pub.publish(gm)
+        self.goals = []
+    
     def stateCallback(self, msg):
-        pose = self.posToPose(msg.p, msg.theta1)
-        self.truck.setHeaderPose(pose)
-
-        trailerpose = self.poseToTrailerPose(pose, 1000, msg.theta2)
-        self.truck.setTrailerPose(trailerpose)
-
-        markers = self.truck.getMarkers()
-
-        self.pub.publish(markers[0])
-        self.pub.publish(markers[1])
-        self.path.pub.publish(self.path.path)
-        # self.map.pub.publish(self.map.map)
-
-    # def trailerPoseCallback(self, msg):
-    #     self.truck.setTrailerPose(msg)
-    #     markers = self.truck.getMarkers()
-    #     self.pub.publish(markers[1])
+        x = msg.p.x
+        y = msg.p.y
+        theta1 = msg.theta1
+        theta2 = msg.theta2
+        
+        self.truck.setHeaderPosition(x - self.truck.hl/2 * math.cos(theta1), \
+                self.height - (y- self.truck.hl/2 * math.sin(theta1)))
+        self.truck.setHeaderDirection(-theta1)
+        
+        jx, jy = (x - self.truck.hl * math.cos(theta1), y- self.truck.hl * math.sin(theta1))
+        mtx, mty = jx - 0.5*self.truck.tl * math.cos(theta2), jy - 0.5*self.truck.tl * math.sin(theta2)
+        
+        
+        
+        
+        self.truck.setTrailerPosition(mtx, self.height - mty)
+        self.truck.setTrailerDirection(-theta2)
     
-    # def headerPoseCallback(self, msg):
-    #     self.truck.setHeaderPose(msg)
-    #     markers = self.truck.getMarkers()
-    #     self.pub.publish(markers[0])
+        self.truck_pub.publish(self.truck.header)
+        self.truck_pub.publish(self.truck.trailer)
+        
+    def pathCallback(self, data):
+        path = [(p.x, p.y) for p in data.path]
+        
+        p = TruckPath(path, 30)
+        self.path_pub.publish(p.path_msg)
+        
+    def refPathCallback(self, data):
+        path = [(p.x, p.y) for p in data.path]
+        
+        p = TruckPath(path, 10)
+        self.ref_path_pub.publish(p.path_msg)
+        
+    def longPathCallback(self, data):
+        path = [(p.x, p.y) for p in data.path]
+        
+        p = TruckPath(path, 20)
+        self.long_path_pub.publish(p.path_msg)
 
-    def posToPose(self, pos, theta):
-        q = self.thetaToQuat(theta)
-        p = Point(pos.x, pos.y, 110)
-        pose = Pose(p, q)
-        return pose
-
-    def poseToTrailerPose(self, pose, trailerlength, theta):
-        pose.position.x = pose.position.x - trailerlength * math.cos(theta)
-        pose.position.y = pose.position.y + trailerlength * math.sin(theta)
-        pose.orientation = self.thetaToQuat(theta)
-        return pose
-    
-    def thetaToQuat(self, theta):
-        quat = tf.transformations.quaternion_about_axis(theta, (0,0, 1))
-        return Quaternion(quat[0], quat[1], quat[2], quat[3])
+  
         
 class TruckPath:
-    def __init__(self):
-        self.points = []
-        self.pub = rospy.Publisher('sim_path', Path, queue_size=10)
-        rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
-        # self.createPath('/../path.txt')
+    def __init__(self, path, z):
+        
 
-        self.path = Path()
-        self.path.header.frame_id = 'truck'
-        self.path.header.stamp = rospy.Time.now()
-        id = 0
+        self.path_msg = Path()
+        self.path_msg.header.frame_id = 'truck'
 
-    def pathCallback(self, msg):
-        self.path = Path()
-        self.path.header.frame_id = 'truck'
-        self.path.header.stamp = rospy.Time.now()
-        for m in msg.path:
+        for x,y in path:
             posestmpd = PoseStamped()
 
-            # posestmpd.header.seq = id
             posestmpd.header.frame_id = 'truck'
-            posestmpd.header.stamp = rospy.Time.now()
 
-            posestmpd.pose.position.x = m.x
-            posestmpd.pose.position.y = m.y
-            posestmpd.pose.position.z = 30
+            posestmpd.pose.position.x = x
+            posestmpd.pose.position.y = 9650-y
+            posestmpd.pose.position.z = z
 
             posestmpd.pose.orientation.w = 0.0
+            posestmpd.pose.orientation.x = 0.0
+            posestmpd.pose.orientation.y = 0.0
+            posestmpd.pose.orientation.z = 0.0
 
-            self.path.poses.append(posestmpd)
-            # id += 1
-        while not rospy.is_shutdown():
-            self.pub.publish(self.path)
-            print self.path
-    
-    def createPath(self, path):
-        dirpath = os.path.dirname(os.path.abspath(__file__))
-        f = open(dirpath+path, 'r')
-        lines = [line.rstrip('\n') for line in f.readlines()]
-        posL = [s.split(' ', 1 ) for s in lines]
-        for l in posL:
-            self.points.append((int(l[0]),int(l[1]),0))
+            self.path_msg.poses.append(posestmpd)
+        
+        
 
 class TruckModel:
     def __init__(self):
+        
+        self.hl = 270
+        self.hw = 180
+        
+        self.tl = 620
+        self.tw = 180
+        
+        
         # Create the header marker, and set a static frame
         self.header = Marker()
         self.header.header.frame_id = "truck"
-        self.header.header.stamp = rospy.Time.now()
+        #self.header.header.stamp = rospy.Time.now()
 
         # Set the namespace and id of the header, making it unique
         self.header.ns = "truck"
@@ -129,8 +171,8 @@ class TruckModel:
         self.header.lifetime = rospy.Duration(0)
         
         # Truck measurments in mm
-        self.header.scale.x = 420 #420
-        self.header.scale.y = 190
+        self.header.scale.x = self.hl #420
+        self.header.scale.y = self.hw
         self.header.scale.z = 220
 
         # sick blue color
@@ -139,13 +181,13 @@ class TruckModel:
         self.header.color.b = 0.95294117647
         self.header.color.a = 1.0
         
-        self.header.pose.position.x = 0.0
-        self.header.pose.position.y = 0.0
+        #self.header.pose.position.x = 0.0
+        #self.header.pose.position.y = 0.0
         self.header.pose.position.z = 110
 
         self.trailer = Marker()
         self.trailer.header.frame_id = "truck"
-        self.trailer.header.stamp = rospy.Time.now()
+        #self.trailer.header.stamp = rospy.Time.now()
 
         self.trailer.ns = "trailer"
         self.trailer.id = 1
@@ -157,8 +199,8 @@ class TruckModel:
         self.trailer.lifetime = rospy.Duration(0)
         
         # Truck measurments in mm
-        self.trailer.scale.x = 1000
-        self.trailer.scale.y = 190
+        self.trailer.scale.x = self.tl
+        self.trailer.scale.y = self.tw
         self.trailer.scale.z = 220
 
         # sick red color
@@ -167,33 +209,31 @@ class TruckModel:
         self.trailer.color.b = 0.21176470588
         self.trailer.color.a = 1.0
         
-        self.trailer.pose.position.x = 0.0
-        self.trailer.pose.position.y = -self.trailer.scale.x
+        #self.trailer.pose.position.x = 0.0
+        #self.trailer.pose.position.y = -self.trailer.scale.x
         self.trailer.pose.position.z = 110
         
-        self.setDirection(45)
+        #self.setHeaderDirection(math.pi/4+0.4)
 
-    def getMarkers(self):
-        return [self.header, self.trailer]
+   
+    def setHeaderPosition(self, x, y):
+        self.header.pose.position.x = x
+        self.header.pose.position.y = y
+        
+    def setTrailerPosition(self, x, y):
+        self.trailer.pose.position.x = x
+        self.trailer.pose.position.y = y
 
-    def setHeaderPose(self, pose):
-        # theta = tf.transformations.euler_from_quaternion((pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w))[2]
-        # pose.position.x = pose.position.x + (self.header.scale.x/2) * math.cos(theta)
-        # pose.position.y = pose.position.y + (self.header.scale.x/2) * math.sin(theta)
-        self.header.pose = pose
-
-    def setTrailerPose(self, pose):
-        # theta = tf.transformations.euler_from_quaternion((pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w))[2]
-        # pose.position.x = pose.position.x + (self.trailer.scale.x/2) * math.cos(theta)
-        # pose.position.y = pose.position.y + (self.trailer.scale.x/2) * math.sin(theta)
-        self.trailer.pose = pose
-
-    def setPosition(self, position):
-        self.header.pose.position = position
-
+    def setTrailerDirection(self, angle):
+        quat = tf.transformations.quaternion_from_euler(0.0, 0.0, angle)
+        self.trailer.pose.orientation.x = quat[0]
+        self.trailer.pose.orientation.y = quat[1]
+        self.trailer.pose.orientation.z = quat[2]
+        self.trailer.pose.orientation.w = quat[3]
+    
     # Takes angle in degrees and sets the direction of the marker
-    def setDirection(self, angle):
-        quat = tf.transformations.quaternion_from_euler(0.0, 0.0, math.radians(angle))
+    def setHeaderDirection(self, angle):
+        quat = tf.transformations.quaternion_from_euler(0.0, 0.0, angle)
         self.header.pose.orientation.x = quat[0]
         self.header.pose.orientation.y = quat[1]
         self.header.pose.orientation.z = quat[2]
@@ -201,6 +241,7 @@ class TruckModel:
 
 class MapModel:
     def __init__(self):
+        
         stamp = rospy.Time.now()
 
         self.map = OccupancyGrid()
@@ -209,57 +250,38 @@ class MapModel:
 
         # The time at which the map was loaded
         load_time = stamp
-        # The map resolution [m/cell]
-        resolution = 10
-        width = 490
-        height = 965
+        
         # The origin of the map [m, m, rad].  This is the real-world pose of the
         # cell (0,0) in the map.
         origin = Pose(Point(0,0,0), Quaternion(0,0,0,0))
 
-        self.map.info = MapMetaData(load_time, resolution, width, height, origin)
+        mapFromImg, self.resolution = Map().getMapAndScale()
+        
+        mapFromImg = mapFromImg[::-1]
+        
+        self.width = len(mapFromImg[0])
+        self.height = len(mapFromImg)
+        
+        self.map.info = MapMetaData(load_time, self.resolution, self.width, self.height, origin)
+        
+        for row in range(self.height):
+            for col in range(self.width):
+                c = mapFromImg[row][col]
+                if c == 0:
+                    self.map.data.append(100)
+                elif c == 1:
+                    self.map.data.append(0)
+                    
+                else:
+                    self.map.data.append(50)
 
-        mapFromImg = self.readImgToMatrix(MAP_PATH)
-        for row in range(len(mapFromImg)):
-            for elem in range(len(mapFromImg[row])):
-                self.map.data.append(mapFromImg[row][elem])
-
-        self.pub = rospy.Publisher("truck_map", OccupancyGrid, queue_size=10)
-        self.pub.publish(self.map)
-        self.rate = rospy.Rate(1)
-        # thread = Thread(None, self.loop, "loop")
-        # thread.start()
+        
+        
+        
     
-    def loop(self):
-        while not rospy.is_shutdown() :
-            self.pub.publish(self.map)
-            self.rate.sleep()
-
-    def readImgToMatrix(self, path):
-        dirpath = dirname(abspath(__file__))
-        matrix = np.asarray(cv2.imread(dirpath + path, 0), dtype=np.uint8).tolist()
-
-        # Going through all elements, adjusting their value to match [0, 1, 2]
-        # Where:
-        #     0 = Black
-        #     1 = White
-        #     2 = Grey
-        for row in range(len(matrix)):
-            for elem in range(len(matrix[row])):
-                # Not black
-                if matrix[row][elem] != 0:
-                    # White
-                    if matrix[row][elem] == 255:
-                        matrix[row][elem] = 50
-                    # Grey
-                    else:
-                        matrix[row][elem] = 100
-
-        #plt.imshow(matrix)
-        #plt.show()
-        return matrix
          
 
 if __name__=="__main__":
     Visualizer()
+    rospy.spin()
     
