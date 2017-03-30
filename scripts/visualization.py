@@ -32,6 +32,8 @@ class Visualizer:
         
         self.goals = []
         
+        self.last_pos_path = rospy.get_time()
+        
         self.truck = TruckModel()
         self.map_obj = Map()
         self.mapmodel = MapModel(self.map_obj)
@@ -39,20 +41,6 @@ class Visualizer:
         
         self.width = self.mapmodel.width * self.mapmodel.resolution
         self.height = self.mapmodel.height * self.mapmodel.resolution
-        
-        rospy.Subscriber('truck_state', TruckState, self.stateCallback)
-        rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
-        
-        rospy.Subscriber('alg_startend',cm.Path, self.algStartEndCallback)
-        
-        rospy.Subscriber('long_path', cm.Path, self.longPathCallback)
-        rospy.Subscriber('ref_path', cm.Path, self.refPathCallback)
-        
-        rospy.Subscriber('clicked_point', PointStamped, self.pointClickedCallback)
-        rospy.Subscriber('move_base_simple/goal', PoseStamped, self.goalPointCallback)
-        rospy.Subscriber('initialpose', PoseWithCovarianceStamped, self.initPoseCallback)
-        
-        rospy.Subscriber('map_updated', Int8, self.mapUpdateHandler)
         
         self.sim_reset_pub = rospy.Publisher('sim_reset', TruckState, queue_size=10)
         
@@ -65,8 +53,78 @@ class Visualizer:
         self.endpoint_pub = rospy.Publisher("end_point", PointStamped, queue_size=10)
         self.startpoint_pub = rospy.Publisher("start_point", PointStamped, queue_size=10)
         
-        rospy.sleep(2)
+        self.possible_path_pub = rospy.Publisher("possible_paths", Path, queue_size=10)
+        self.visited_pub = rospy.Publisher("visited_points", PointStamped, queue_size=10)
+        self.tovisit_pub = rospy.Publisher("tovisit_points", PointStamped, queue_size=10)
+        
+        
+        self.setpoint_pub = rospy.Publisher("setpoints", PointStamped, queue_size=10)
+        
+        
+        rospy.Subscriber('truck_state', TruckState, self.stateCallback)
+        rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
+        
+        rospy.Subscriber('alg_startend',cm.Path, self.algStartEndCallback)
+        
+        
+        rospy.Subscriber('possible_path',cm.Path, self.possiblePathCallback)
+        
+        rospy.Subscriber('to_visit_node',cm.Position, self.toVisitCallback)
+        rospy.Subscriber('visited_node', cm.Position, self.visitedCallback)
+        rospy.Subscriber('alg_startend',cm.Path, self.algStartEndCallback)
+        
+        
+        
+        rospy.Subscriber('long_path', cm.Path, self.longPathCallback)
+        rospy.Subscriber('ref_path', cm.Path, self.refPathCallback)
+        
+        rospy.Subscriber('clicked_point', PointStamped, self.pointClickedCallback)
+        rospy.Subscriber('move_base_simple/goal', PoseStamped, self.goalPointCallback)
+        rospy.Subscriber('initialpose', PoseWithCovarianceStamped, self.initPoseCallback)
+        
+        rospy.Subscriber('map_updated', Int8, self.mapUpdateHandler)
+        
+        
+        
+        
+        
+        rospy.sleep(0.5)
         self.map_pub.publish(self.mapmodel.map)
+        
+    def possiblePathCallback(self, data):
+        now = rospy.get_time()
+        if now - self.last_pos_path > 5:
+            dp = self.getDummyPointStamped()
+           
+            for _ in range(20):
+                rospy.sleep(0.009)
+                self.visited_pub.publish(dp)
+            for _ in range(30):
+                
+                rospy.sleep(0.009)
+                self.tovisit_pub.publish(dp)
+                
+        self.last_pos_path = now
+        
+        path = [(p.x*10, p.y*10) for p in data.path]
+        p = TruckPath(path, 20)
+        self.possible_path_pub.publish(p.path_msg)
+        
+    def visitedCallback(self, data):
+        s = PointStamped()
+        s.header.frame_id = "truck"
+        s.point.x = data.x*10
+        s.point.y = self.height - data.y*10
+        self.visited_pub.publish(s)
+    
+    def toVisitCallback(self, data):
+        s = PointStamped()
+        s.header.frame_id = "truck"
+        s.point.x = data.x*10
+        s.point.y = self.height - data.y*10
+        self.tovisit_pub.publish(s)
+    
+    
         
     def initPoseCallback(self, data):
         self.goals = []
@@ -79,6 +137,34 @@ class Visualizer:
         e = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
         ts.theta1 = ts.theta2 = -e[2]
         self.sim_reset_pub.publish(ts)
+        
+        self.long_path_pub.publish(self.getDummyPath())
+        self.ref_path_pub.publish(self.getDummyPath())
+        self.path_pub.publish(self.getDummyPath())
+        self.endpoint_pub.publish(self.getDummyPointStamped())
+        self.startpoint_pub.publish(self.getDummyPointStamped())
+        
+        dp = self.getDummyPointStamped()
+        for _ in range(10):
+            self.setpoint_pub.publish(dp)
+            
+        dp = self.getDummyPointStamped()
+           
+        dummypath = self.getDummyPath()
+        for _ in range(20):
+            rospy.sleep(0.009)
+            self.visited_pub.publish(dp)
+        for _ in range(30):
+            
+            rospy.sleep(0.009)
+            self.tovisit_pub.publish(dp)
+            
+        for _ in range(1):
+            
+            rospy.sleep(0.009)
+            self.possible_path_pub.publish(dummypath)
+        
+        
         
         
     def algStartEndCallback(self, data):
@@ -99,6 +185,7 @@ class Visualizer:
         self.endpoint_pub.publish(e)
         
         
+        
     
     def mapUpdateHandler(self, data):
         obst = data.data
@@ -111,17 +198,83 @@ class Visualizer:
         self.mapmodel = MapModel(self.map_obj)
         self.map_pub.publish(self.mapmodel.map)
 
+    def getDummyPoseStamped(self):
+        ps = PoseStamped()
+
+        ps.header.frame_id = 'truck'
+
+        ps.pose.position.z = 5000
+        return ps
+    
+    def getDummyPath(self):
+        p = Path()
+        p.header.frame_id = "truck"
+        p.poses.append(self.getDummyPoseStamped())
+        return p
+
+        
+    def getDummyPointStamped(self):
+        p = PointStamped()
+        p.header.frame_id = "truck"
+        p.point.z = 5000
+        return p
         
     def pointClickedCallback(self, data):
         p = data.point
+        
+        if self.goals == []:
+            dp = self.getDummyPointStamped()
+            for _ in range(10):
+                self.setpoint_pub.publish(dp)
+            
+            
+            
+        
         self.goals.append((p.x, p.y))
+        
+        self.setpoint_pub.publish(data)
         
     def goalPointCallback(self, data):
         p = data.pose.position
+        
+        dp = self.getDummyPointStamped()
+           
+        dummypath = self.getDummyPath()
+        for _ in range(20):
+            rospy.sleep(0.009)
+            self.visited_pub.publish(dp)
+        for _ in range(30):
+            
+            rospy.sleep(0.009)
+            self.tovisit_pub.publish(dp)
+            
+        for _ in range(1):
+            
+            rospy.sleep(0.009)
+            self.possible_path_pub.publish(dummypath)
+        
+        
+        if self.goals == []:
+            
+            
+            
+            
+            dp = self.getDummyPointStamped()
+            for _ in range(10):
+                self.setpoint_pub.publish(dp)
+        
+        
+        
         self.goals.append((p.x, p.y))
         
         gm = [cm.Position(x,self.height - y) for x,y in self.goals]
         self.goal_pub.publish(gm)
+        
+        ps = PointStamped()
+        ps.header.frame_id = "truck"
+        ps.point.x = p.x
+        ps.point.y = p.y
+        self.setpoint_pub.publish(ps)
         self.goals = []
     
     def stateCallback(self, msg):
@@ -147,6 +300,10 @@ class Visualizer:
         self.truck_pub.publish(self.truck.trailer)
         
     def pathCallback(self, data):
+        
+        
+        
+        
         path = [(p.x, p.y) for p in data.path]
         
         p = TruckPath(path, 30)
@@ -155,11 +312,26 @@ class Visualizer:
     def refPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
         
+        self.path_pub.publish(self.getDummyPath())
+        self.long_path_pub.publish(self.getDummyPath())
+        
+        
         p = TruckPath(path, 10)
         self.ref_path_pub.publish(p.path_msg)
         
     def longPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
+        
+        
+        dp = self.getDummyPointStamped()
+       
+        for _ in range(20):
+            rospy.sleep(0.009)
+            self.visited_pub.publish(dp)
+        for _ in range(30):
+            
+            rospy.sleep(0.009)
+            self.tovisit_pub.publish(dp)
         
         p = TruckPath(path, 20)
         self.long_path_pub.publish(p.path_msg)
