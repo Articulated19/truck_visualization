@@ -9,7 +9,7 @@ import numpy as np
 import sys
 from std_msgs.msg import Int8
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PointStamped
+from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PointStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, OccupancyGrid, MapMetaData
 from custom_msgs.msg import TruckState, Position
 import custom_msgs.msg as cm 
@@ -50,10 +50,11 @@ class Visualizer:
         
         rospy.Subscriber('clicked_point', PointStamped, self.pointClickedCallback)
         rospy.Subscriber('move_base_simple/goal', PoseStamped, self.goalPointCallback)
-        
+        rospy.Subscriber('initialpose', PoseWithCovarianceStamped, self.initPoseCallback)
         
         rospy.Subscriber('map_updated', Int8, self.mapUpdateHandler)
         
+        self.sim_reset_pub = rospy.Publisher('sim_reset', TruckState, queue_size=10)
         
         self.goal_pub = rospy.Publisher('truck_goals', cm.Path, queue_size=10)
         self.truck_pub = rospy.Publisher('truck_marker', Marker, queue_size=10)
@@ -66,6 +67,19 @@ class Visualizer:
         
         rospy.sleep(2)
         self.map_pub.publish(self.mapmodel.map)
+        
+    def initPoseCallback(self, data):
+        self.goals = []
+        po = data.pose.pose
+        q = po.orientation
+        p = po.position
+        
+        ts = TruckState()
+        ts.p = Position(p.x, self.height - p.y)
+        e = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        ts.theta1 = ts.theta2 = -e[2]
+        self.sim_reset_pub.publish(ts)
+        
         
     def algStartEndCallback(self, data):
         p = data.path
