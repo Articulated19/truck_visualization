@@ -280,15 +280,24 @@ class Visualizer:
     def stateCallback(self, msg):
         x = msg.p.x
         y = msg.p.y
+        
         theta1 = msg.theta1
         theta2 = msg.theta2
         
-        self.truck.setHeaderPosition(x - self.truck.hl/2 * math.cos(theta1), \
-                self.height - (y- self.truck.hl/2 * math.sin(theta1)))
+        xf = x + self.truck.hl1 * math.cos(theta1)
+        yf = y + self.truck.hl1 * math.sin(theta1)
+        
+        self.truck.setHeaderPosition(xf - self.truck.getTotalHeaderLength()* 0.5 * math.cos(theta1), \
+                self.height - (yf- self.truck.getTotalHeaderLength() * 0.5 * math.sin(theta1)))
         self.truck.setHeaderDirection(-theta1)
         
-        jx, jy = (x - self.truck.hl * math.cos(theta1), y- self.truck.hl * math.sin(theta1))
-        mtx, mty = jx - 0.5*self.truck.tl * math.cos(theta2), jy - 0.5*self.truck.tl * math.sin(theta2)
+        jx, jy = x - self.truck.hl2 * math.cos(theta1), y - self.truck.hl2 * math.sin(theta1)
+        
+        
+        xtf = jx + self.truck.tl1 * math.cos(theta2)
+        ytf = jy + self.truck.tl1 * math.sin(theta2)
+        
+        mtx, mty = xtf - 0.5*self.truck.getTotalTrailerLength() * math.cos(theta2), ytf - 0.5*self.truck.getTotalTrailerLength() * math.sin(theta2)
         
         
         
@@ -366,10 +375,18 @@ class TruckPath:
 class TruckModel:
     def __init__(self):
         
-        self.hl = 270
+        self.hl1 = 100
+        self.hl2 = 210
+        self.hl3 = 75
+        
+        self.tl1 = 75
+        self.tl2 = 490
+        self.tl3 = 135
+        
+        
+        
         self.hw = 180
         
-        self.tl = 620
         self.tw = 180
         
         
@@ -389,7 +406,7 @@ class TruckModel:
         self.header.lifetime = rospy.Duration(0)
         
         # Truck measurments in mm
-        self.header.scale.x = self.hl #420
+        self.header.scale.x = self.getTotalHeaderLength()
         self.header.scale.y = self.hw
         self.header.scale.z = 220
 
@@ -397,7 +414,7 @@ class TruckModel:
         self.header.color.r = 0.1294117647
         self.header.color.g = 0.58823529411
         self.header.color.b = 0.95294117647
-        self.header.color.a = 1.0
+        self.header.color.a = 0.85
         
         #self.header.pose.position.x = 0.0
         #self.header.pose.position.y = 0.0
@@ -417,7 +434,7 @@ class TruckModel:
         self.trailer.lifetime = rospy.Duration(0)
         
         # Truck measurments in mm
-        self.trailer.scale.x = self.tl
+        self.trailer.scale.x = self.getTotalTrailerLength()
         self.trailer.scale.y = self.tw
         self.trailer.scale.z = 220
 
@@ -425,13 +442,19 @@ class TruckModel:
         self.trailer.color.r = 0.956862745
         self.trailer.color.g = 0.26274509803
         self.trailer.color.b = 0.21176470588
-        self.trailer.color.a = 1.0
+        self.trailer.color.a = 0.8
         
         #self.trailer.pose.position.x = 0.0
         #self.trailer.pose.position.y = -self.trailer.scale.x
         self.trailer.pose.position.z = 110
         
         #self.setHeaderDirection(math.pi/4+0.4)
+        
+    def getTotalHeaderLength(self):
+        return self.hl1 + self.hl2 + self.hl3
+    
+    def getTotalTrailerLength(self):
+        return self.tl1 + self.tl2 + self.tl3
 
    
     def setHeaderPosition(self, x, y):
