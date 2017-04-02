@@ -19,17 +19,14 @@ p = os.path.abspath(os.path.dirname(__file__))
 lib_path = os.path.abspath(os.path.join(p, '..', '..', 'truck_map', 'scripts'))
 sys.path.append(lib_path)
 from map_func import *
+from spline import spline
 
-
-#lib_path = os.path.abspath(os.path.join('..', '..', '..', 'lib'))
-#sys.path.append(lib_path)
-
-#import mymodule
 
 class Visualizer:
     def __init__(self):
-        rospy.init_node('visualizer')
         
+        rospy.init_node('visualizer')
+        rospy.sleep(1)
         self.goals = []
         
         self.last_pos_path = rospy.get_time()
@@ -50,6 +47,8 @@ class Visualizer:
         self.path_pub = rospy.Publisher("truck_path", Path, queue_size=10)
         self.ref_path_pub = rospy.Publisher("truck_ref_path", Path, queue_size=10)
         self.long_path_pub = rospy.Publisher("truck_long_path", Path, queue_size=10)
+        self.trailer_path_pub = rospy.Publisher("truck_trailer_path", Path, queue_size=10)
+        
         self.endpoint_pub = rospy.Publisher("end_point", PointStamped, queue_size=10)
         self.startpoint_pub = rospy.Publisher("start_point", PointStamped, queue_size=10)
         
@@ -77,6 +76,8 @@ class Visualizer:
         
         rospy.Subscriber('long_path', cm.Path, self.longPathCallback)
         rospy.Subscriber('ref_path', cm.Path, self.refPathCallback)
+        rospy.Subscriber('trailer_path', cm.Path, self.trailerPathCallback)
+        
         
         rospy.Subscriber('clicked_point', PointStamped, self.pointClickedCallback)
         rospy.Subscriber('move_base_simple/goal', PoseStamped, self.goalPointCallback)
@@ -141,6 +142,7 @@ class Visualizer:
         self.long_path_pub.publish(self.getDummyPath())
         self.ref_path_pub.publish(self.getDummyPath())
         self.path_pub.publish(self.getDummyPath())
+        self.trailer_path_pub.publish(self.getDummyPath())
         self.endpoint_pub.publish(self.getDummyPointStamped())
         self.startpoint_pub.publish(self.getDummyPointStamped())
         
@@ -237,6 +239,8 @@ class Visualizer:
     def goalPointCallback(self, data):
         p = data.pose.position
         
+        self.tp = []
+        
         dp = self.getDummyPointStamped()
            
         dummypath = self.getDummyPath()
@@ -311,9 +315,8 @@ class Visualizer:
     def pathCallback(self, data):
         
         
-        
-        
         path = [(p.x, p.y) for p in data.path]
+        
         
         p = TruckPath(path, 30)
         self.path_pub.publish(p.path_msg)
@@ -328,6 +331,7 @@ class Visualizer:
         path = [(p.x, p.y) for p in data.path]
         
         self.path_pub.publish(self.getDummyPath())
+        self.trailer_path_pub.publish(self.getDummyPath())
         self.long_path_pub.publish(self.getDummyPath())
         
         
@@ -337,6 +341,8 @@ class Visualizer:
     def longPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
         
+        
+        path = spline(path, 0, len(path)*7)
         
         dp = self.getDummyPointStamped()
        
@@ -350,6 +356,19 @@ class Visualizer:
         
         p = TruckPath(path, 20)
         self.long_path_pub.publish(p.path_msg)
+        
+        
+    def trailerPathCallback(self, data):
+        
+        
+        path = [(p.x, p.y) for p in data.path]
+        
+        path = spline(path, 0, len(path)*7)
+        
+        p = TruckPath(path, 30)
+        self.trailer_path_pub.publish(p.path_msg)
+        
+        
 
   
         
