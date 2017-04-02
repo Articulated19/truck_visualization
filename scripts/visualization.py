@@ -318,6 +318,12 @@ class Visualizer:
         p = TruckPath(path, 30)
         self.path_pub.publish(p.path_msg)
         
+        dp = self.getDummyPath()
+        for _ in range(1):
+            
+            self.possible_path_pub.publish(dp)
+        
+        
     def refPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
         
