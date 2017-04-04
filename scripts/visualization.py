@@ -21,10 +21,8 @@ sys.path.append(lib_path)
 from map_func import *
 from spline import spline
 
-
 class Visualizer:
     def __init__(self):
-        
         rospy.init_node('visualizer')
         rospy.sleep(1)
         self.goals = []
@@ -34,7 +32,6 @@ class Visualizer:
         self.truck = TruckModel()
         self.map_obj = Map()
         self.mapmodel = MapModel(self.map_obj)
-        
         
         self.width = self.mapmodel.width * self.mapmodel.resolution
         self.height = self.mapmodel.height * self.mapmodel.resolution
@@ -64,7 +61,6 @@ class Visualizer:
         rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
         
         rospy.Subscriber('alg_startend',cm.Path, self.algStartEndCallback)
-        
         
         rospy.Subscriber('possible_path',cm.Path, self.possiblePathCallback)
         
@@ -112,7 +108,6 @@ class Visualizer:
         self.text.pose.position.z = 110
 
         self.text_pub.publish(self.text)
-
         
     def possiblePathCallback(self, data):
         now = rospy.get_time()
