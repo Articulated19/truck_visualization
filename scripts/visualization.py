@@ -72,8 +72,6 @@ class Visualizer:
         rospy.Subscriber('visited_node', cm.Position, self.visitedCallback)
         rospy.Subscriber('alg_startend',cm.Path, self.algStartEndCallback)
         
-        
-        
         rospy.Subscriber('long_path', cm.Path, self.longPathCallback)
         rospy.Subscriber('ref_path', cm.Path, self.refPathCallback)
         rospy.Subscriber('trailer_path', cm.Path, self.trailerPathCallback)
@@ -84,11 +82,7 @@ class Visualizer:
         rospy.Subscriber('initialpose', PoseWithCovarianceStamped, self.initPoseCallback)
         
         rospy.Subscriber('map_updated', Int8, self.mapUpdateHandler)
-        
-        
-        
-        
-        
+
         rospy.sleep(0.5)
         self.map_pub.publish(self.mapmodel.map)
         
@@ -124,8 +118,6 @@ class Visualizer:
         s.point.x = data.x*10
         s.point.y = self.height - data.y*10
         self.tovisit_pub.publish(s)
-    
-    
         
     def initPoseCallback(self, data):
         self.goals = []
@@ -166,9 +158,6 @@ class Visualizer:
             rospy.sleep(0.009)
             self.possible_path_pub.publish(dummypath)
         
-        
-        
-        
     def algStartEndCallback(self, data):
         p = data.path
         
@@ -185,10 +174,7 @@ class Visualizer:
         e.point.y = self.height - p[1].y
         
         self.endpoint_pub.publish(e)
-        
-        
-        
-    
+
     def mapUpdateHandler(self, data):
         obst = data.data
         add = self.map_obj.addObstacle(obst)
@@ -213,7 +199,6 @@ class Visualizer:
         p.header.frame_id = "truck"
         p.poses.append(self.getDummyPoseStamped())
         return p
-
         
     def getDummyPointStamped(self):
         p = PointStamped()
@@ -228,9 +213,6 @@ class Visualizer:
             dp = self.getDummyPointStamped()
             for _ in range(10):
                 self.setpoint_pub.publish(dp)
-            
-            
-            
         
         self.goals.append((p.x, p.y))
         
@@ -248,27 +230,18 @@ class Visualizer:
             rospy.sleep(0.009)
             self.visited_pub.publish(dp)
         for _ in range(30):
-            
             rospy.sleep(0.009)
             self.tovisit_pub.publish(dp)
-            
+
         for _ in range(1):
-            
             rospy.sleep(0.009)
             self.possible_path_pub.publish(dummypath)
-        
-        
+
         if self.goals == []:
-            
-            
-            
-            
             dp = self.getDummyPointStamped()
             for _ in range(10):
                 self.setpoint_pub.publish(dp)
-        
-        
-        
+
         self.goals.append((p.x, p.y))
         
         gm = [cm.Position(x,self.height - y) for x,y in self.goals]
@@ -302,10 +275,7 @@ class Visualizer:
         ytf = jy + self.truck.tl1 * math.sin(theta2)
         
         mtx, mty = xtf - 0.5*self.truck.getTotalTrailerLength() * math.cos(theta2), ytf - 0.5*self.truck.getTotalTrailerLength() * math.sin(theta2)
-        
-        
-        
-        
+
         self.truck.setTrailerPosition(mtx, self.height - mty)
         self.truck.setTrailerDirection(-theta2)
     
@@ -313,19 +283,14 @@ class Visualizer:
         self.truck_pub.publish(self.truck.trailer)
         
     def pathCallback(self, data):
-        
-        
         path = [(p.x, p.y) for p in data.path]
-        
         
         p = TruckPath(path, 30)
         self.path_pub.publish(p.path_msg)
         
         dp = self.getDummyPath()
         for _ in range(1):
-            
             self.possible_path_pub.publish(dp)
-        
         
     def refPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
@@ -341,7 +306,6 @@ class Visualizer:
     def longPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
         
-        
         path = spline(path, 0, len(path)*7)
         
         dp = self.getDummyPointStamped()
@@ -350,32 +314,21 @@ class Visualizer:
             rospy.sleep(0.009)
             self.visited_pub.publish(dp)
         for _ in range(30):
-            
             rospy.sleep(0.009)
             self.tovisit_pub.publish(dp)
         
         p = TruckPath(path, 20)
         self.long_path_pub.publish(p.path_msg)
-        
-        
+
     def trailerPathCallback(self, data):
-        
-        
         path = [(p.x, p.y) for p in data.path]
-        
         path = spline(path, 0, len(path)*7)
-        
+    
         p = TruckPath(path, 30)
         self.trailer_path_pub.publish(p.path_msg)
-        
-        
 
-  
-        
 class TruckPath:
     def __init__(self, path, z):
-        
-
         self.path_msg = Path()
         self.path_msg.header.frame_id = 'truck'
 
@@ -394,8 +347,6 @@ class TruckPath:
             posestmpd.pose.orientation.z = 0.0
 
             self.path_msg.poses.append(posestmpd)
-        
-        
 
 class TruckModel:
     def __init__(self):
@@ -540,12 +491,6 @@ class MapModel:
                     
                 else:
                     self.map.data.append(50)
-
-        
-        
-        
-    
-         
 
 if __name__=="__main__":
     Visualizer()
