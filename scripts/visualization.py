@@ -7,7 +7,7 @@ from threading import Thread
 from os.path import dirname, abspath
 import numpy as np
 import sys
-from std_msgs.msg import Int8
+from std_msgs.msg import Int8, String
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PointStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, OccupancyGrid, MapMetaData
@@ -56,9 +56,9 @@ class Visualizer:
         self.visited_pub = rospy.Publisher("visited_points", PointStamped, queue_size=10)
         self.tovisit_pub = rospy.Publisher("tovisit_points", PointStamped, queue_size=10)
         
-        
         self.setpoint_pub = rospy.Publisher("setpoints", PointStamped, queue_size=10)
         
+        self.text_pub = rospy.Publisher("text_marker", Marker, queue_size=10)
         
         rospy.Subscriber('truck_state', TruckState, self.stateCallback)
         rospy.Subscriber('rviz_path', cm.Path, self.pathCallback)
@@ -83,8 +83,36 @@ class Visualizer:
         
         rospy.Subscriber('map_updated', Int8, self.mapUpdateHandler)
 
+        rospy.Subscriber('sim_text', String, self.textCallback)
+
         rospy.sleep(0.5)
         self.map_pub.publish(self.mapmodel.map)
+
+    def textCallback(self, data):
+        self.text = Marker()
+        self.text.text = data.data
+        self.text.header.frame_id = "truck"
+
+        self.text.type = Marker.TEXT_VIEW_FACING
+        self.text.action = Marker.ADD
+
+        # 0 means that text is now immortal
+        self.text.lifetime = rospy.Duration(0)
+        
+        self.text.scale.z = 220
+
+        # sick blue color
+        self.text.color.r = 0.1294117647
+        self.text.color.g = 0.58823529411
+        self.text.color.b = 0.95294117647
+        self.text.color.a = 0.85
+        
+        self.text.pose.position.x = 0.0
+        self.text.pose.position.y = 0.0
+        self.text.pose.position.z = 110
+
+        self.text_pub.publish(self.text)
+
         
     def possiblePathCallback(self, data):
         now = rospy.get_time()
