@@ -98,10 +98,13 @@ class Visualizer:
         self.text.scale.z = 220
 
         # sick blue color
-        self.text.color.r = 0.1294117647
-        self.text.color.g = 0.58823529411
-        self.text.color.b = 0.95294117647
-        self.text.color.a = 0.85
+        # self.text.color.r = 0.1294117647
+        # self.text.color.g = 0.58823529411
+        # self.text.color.b = 0.95294117647
+        self.text.color.r = 1
+        self.text.color.g = 1
+        self.text.color.b = 1
+        self.text.color.a = 1
         
         self.text.pose.position.x = 0.0
         self.text.pose.position.y = 0.0
