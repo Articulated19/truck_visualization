@@ -216,9 +216,7 @@ class Visualizer:
 
     def getDummyPoseStamped(self):
         ps = PoseStamped()
-
         ps.header.frame_id = 'truck'
-
         ps.pose.position.z = 5000
         return ps
     
@@ -233,26 +231,24 @@ class Visualizer:
         p.header.frame_id = "truck"
         p.point.z = 5000
         return p
-        
+
     def pointClickedCallback(self, data):
         p = data.point
-        
+
         if self.goals == []:
             dp = self.getDummyPointStamped()
             for _ in range(10):
                 self.setpoint_pub.publish(dp)
-        
+
         self.goals.append((p.x, p.y))
-        
+
         self.setpoint_pub.publish(data)
-        
+
     def goalPointCallback(self, data):
         p = data.pose.position
-        
         self.tp = []
-        
         dp = self.getDummyPointStamped()
-           
+
         dummypath = self.getDummyPath()
         for _ in range(20):
             rospy.sleep(0.009)
@@ -271,87 +267,83 @@ class Visualizer:
                 self.setpoint_pub.publish(dp)
 
         self.goals.append((p.x, p.y))
-        
+
         gm = [cm.Position(x,self.height - y) for x,y in self.goals]
         self.goal_pub.publish(gm)
-        
+
         ps = PointStamped()
         ps.header.frame_id = "truck"
         ps.point.x = p.x
         ps.point.y = p.y
         self.setpoint_pub.publish(ps)
         self.goals = []
-    
+
     def stateCallback(self, msg):
         x = msg.p.x
         y = msg.p.y
-        
+
         theta1 = msg.theta1
         theta2 = msg.theta2
-        
+
         xf = x + self.truck.hl1 * math.cos(theta1)
         yf = y + self.truck.hl1 * math.sin(theta1)
-        
+
         self.truck.setHeaderPosition(xf - self.truck.getTotalHeaderLength()* 0.5 * math.cos(theta1), \
                 self.height - (yf- self.truck.getTotalHeaderLength() * 0.5 * math.sin(theta1)))
         self.truck.setHeaderDirection(-theta1)
-        
+
         jx, jy = x - self.truck.hl2 * math.cos(theta1), y - self.truck.hl2 * math.sin(theta1)
-        
-        
+
         xtf = jx + self.truck.tl1 * math.cos(theta2)
         ytf = jy + self.truck.tl1 * math.sin(theta2)
-        
+
         mtx, mty = xtf - 0.5*self.truck.getTotalTrailerLength() * math.cos(theta2), ytf - 0.5*self.truck.getTotalTrailerLength() * math.sin(theta2)
 
         self.truck.setTrailerPosition(mtx, self.height - mty)
         self.truck.setTrailerDirection(-theta2)
-    
+
         self.truck_pub.publish(self.truck.header)
         self.truck_pub.publish(self.truck.trailer)
-        
+
     def pathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
-        
+
         p = TruckPath(path, 30)
         self.path_pub.publish(p.path_msg)
         
         dp = self.getDummyPath()
         for _ in range(1):
             self.possible_path_pub.publish(dp)
-        
+
     def refPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
-        
+
         self.path_pub.publish(self.getDummyPath())
         self.trailer_path_pub.publish(self.getDummyPath())
         self.long_path_pub.publish(self.getDummyPath())
-        
-        
+
         p = TruckPath(path, 10)
         self.ref_path_pub.publish(p.path_msg)
         
     def longPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
-        
         path = spline(path, 0, len(path)*7)
-        
         dp = self.getDummyPointStamped()
-       
+
         for _ in range(20):
             rospy.sleep(0.009)
             self.visited_pub.publish(dp)
         for _ in range(30):
             rospy.sleep(0.009)
             self.tovisit_pub.publish(dp)
-        
+
         p = TruckPath(path, 20)
         self.long_path_pub.publish(p.path_msg)
 
     def trailerPathCallback(self, data):
         path = [(p.x, p.y) for p in data.path]
         path = spline(path, 0, len(path)*7)
-    
+
         p = TruckPath(path, 30)
         self.trailer_path_pub.publish(p.path_msg)
 
@@ -387,12 +379,8 @@ class TruckModel:
         self.tl2 = 490
         self.tl3 = 135
         
-        
-        
         self.hw = 180
-        
         self.tw = 180
-        
         
         # Create the header marker, and set a static frame
         self.header = Marker()
@@ -460,7 +448,6 @@ class TruckModel:
     def getTotalTrailerLength(self):
         return self.tl1 + self.tl2 + self.tl3
 
-   
     def setHeaderPosition(self, x, y):
         self.header.pose.position.x = x
         self.header.pose.position.y = y
