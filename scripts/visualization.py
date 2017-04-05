@@ -369,13 +369,13 @@ class TruckPath:
 class TruckModel:
     def __init__(self):
         
-        self.hl1 = 100
-        self.hl2 = 210
-        self.hl3 = 75
+        self.hl1 = 95
+        self.hl2 = 220
+        self.hl3 = 110
         
         self.tl1 = 75
-        self.tl2 = 490
-        self.tl3 = 135
+        self.tl2 = 445+102.5+85
+        self.tl3 = 0
         
         self.hw = 180
         self.tw = 180
