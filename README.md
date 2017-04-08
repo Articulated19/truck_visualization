@@ -16,7 +16,3 @@ start the core and rviz
 start the visualization node
 
 `rosrun truck_visualization visualization.py`
-
-start the simulator
-
-`rosrun truck_simulator run_sim.py`
