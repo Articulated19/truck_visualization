@@ -21,6 +21,11 @@ sys.path.append(lib_path)
 from map_func import *
 from spline import spline
 
+
+
+HEADER_FRAME = "truck"
+
+
 class Visualizer:
     def __init__(self):
         rospy.init_node('visualizer')
@@ -30,11 +35,10 @@ class Visualizer:
         self.last_pos_path = rospy.get_time()
         
         self.truck = TruckModel()
-        self.map_obj = Map()
-        self.mapmodel = MapModel(self.map_obj)
+        self.map_obj = Map(centerline=True)
+        matrix, self.scale = self.map_obj.getMapAndScale()
         
-        self.width = self.mapmodel.width * self.mapmodel.resolution
-        self.height = self.mapmodel.height * self.mapmodel.resolution
+        self.map, self.width, self.height = getOccupancyGrid(matrix, self.scale)
         
         self.sim_reset_pub = rospy.Publisher('sim_reset', TruckState, queue_size=10)
         
@@ -82,200 +86,9 @@ class Visualizer:
         rospy.Subscriber('sim_text', String, self.textCallback)
 
         rospy.sleep(0.5)
-        self.map_pub.publish(self.mapmodel.map)
+        self.map_pub.publish(self.map)
 
-    def textCallback(self, data):
-        self.text = Marker()
-        self.text.text = data.data
-        self.text.header.frame_id = "truck"
-
-        self.text.type = Marker.TEXT_VIEW_FACING
-        self.text.action = Marker.ADD
-
-        # 0 means that text is now immortal
-        self.text.lifetime = rospy.Duration(0)
-        
-        self.text.scale.z = 220
-
-        # sick blue color
-        # self.text.color.r = 0.1294117647
-        # self.text.color.g = 0.58823529411
-        # self.text.color.b = 0.95294117647
-        self.text.color.r = 1
-        self.text.color.g = 1
-        self.text.color.b = 1
-        self.text.color.a = 1
-        
-        self.text.pose.position.x = 0.0
-        self.text.pose.position.y = 0.0
-        self.text.pose.position.z = 110
-
-        self.text_pub.publish(self.text)
-        
-    def possiblePathCallback(self, data):
-        now = rospy.get_time()
-        if now - self.last_pos_path > 5:
-            dp = self.getDummyPointStamped()
-           
-            for _ in range(20):
-                rospy.sleep(0.009)
-                self.visited_pub.publish(dp)
-            for _ in range(30):
-                
-                rospy.sleep(0.009)
-                self.tovisit_pub.publish(dp)
-                
-        self.last_pos_path = now
-        
-        path = [(p.x*10, p.y*10) for p in data.path]
-        p = TruckPath(path, 20)
-        self.possible_path_pub.publish(p.path_msg)
-        
-    def visitedCallback(self, data):
-        s = PointStamped()
-        s.header.frame_id = "truck"
-        s.point.x = data.x*10
-        s.point.y = self.height - data.y*10
-        self.visited_pub.publish(s)
     
-    def toVisitCallback(self, data):
-        s = PointStamped()
-        s.header.frame_id = "truck"
-        s.point.x = data.x*10
-        s.point.y = self.height - data.y*10
-        self.tovisit_pub.publish(s)
-        
-    def initPoseCallback(self, data):
-        self.goals = []
-        po = data.pose.pose
-        q = po.orientation
-        p = po.position
-        
-        ts = TruckState()
-        ts.p = Position(p.x, self.height - p.y)
-        e = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-        ts.theta1 = ts.theta2 = -e[2]
-        self.sim_reset_pub.publish(ts)
-        
-        self.long_path_pub.publish(self.getDummyPath())
-        self.ref_path_pub.publish(self.getDummyPath())
-        self.path_pub.publish(self.getDummyPath())
-        self.trailer_path_pub.publish(self.getDummyPath())
-        self.endpoint_pub.publish(self.getDummyPointStamped())
-        self.startpoint_pub.publish(self.getDummyPointStamped())
-        
-        dp = self.getDummyPointStamped()
-        for _ in range(10):
-            self.setpoint_pub.publish(dp)
-            
-        dp = self.getDummyPointStamped()
-           
-        dummypath = self.getDummyPath()
-        for _ in range(20):
-            rospy.sleep(0.009)
-            self.visited_pub.publish(dp)
-        for _ in range(30):
-            
-            rospy.sleep(0.009)
-            self.tovisit_pub.publish(dp)
-            
-        for _ in range(1):
-            
-            rospy.sleep(0.009)
-            self.possible_path_pub.publish(dummypath)
-        
-    def algStartEndCallback(self, data):
-        p = data.path
-        
-        s = PointStamped()
-        s.header.frame_id = "truck"
-        s.point.x = p[0].x
-        s.point.y = self.height - p[0].y
-        
-        self.startpoint_pub.publish(s)
-        
-        e = PointStamped()
-        e.header.frame_id = "truck"
-        e.point.x = p[1].x
-        e.point.y = self.height - p[1].y
-        
-        self.endpoint_pub.publish(e)
-
-    def mapUpdateHandler(self, data):
-        obst = data.data
-        add = self.map_obj.addObstacle(obst)
-        if not add:
-            rem = self.map_obj.removeObstacle(obst)
-            if not rem:
-                print "can't add or remove obstacle"
-                
-        self.mapmodel = MapModel(self.map_obj)
-        self.map_pub.publish(self.mapmodel.map)
-
-    def getDummyPoseStamped(self):
-        ps = PoseStamped()
-        ps.header.frame_id = 'truck'
-        ps.pose.position.z = 5000
-        return ps
-    
-    def getDummyPath(self):
-        p = Path()
-        p.header.frame_id = "truck"
-        p.poses.append(self.getDummyPoseStamped())
-        return p
-        
-    def getDummyPointStamped(self):
-        p = PointStamped()
-        p.header.frame_id = "truck"
-        p.point.z = 5000
-        return p
-
-    def pointClickedCallback(self, data):
-        p = data.point
-
-        if self.goals == []:
-            dp = self.getDummyPointStamped()
-            for _ in range(10):
-                self.setpoint_pub.publish(dp)
-
-        self.goals.append((p.x, p.y))
-
-        self.setpoint_pub.publish(data)
-
-    def goalPointCallback(self, data):
-        p = data.pose.position
-        self.tp = []
-        dp = self.getDummyPointStamped()
-
-        dummypath = self.getDummyPath()
-        for _ in range(20):
-            rospy.sleep(0.009)
-            self.visited_pub.publish(dp)
-        for _ in range(30):
-            rospy.sleep(0.009)
-            self.tovisit_pub.publish(dp)
-
-        for _ in range(1):
-            rospy.sleep(0.009)
-            self.possible_path_pub.publish(dummypath)
-
-        if self.goals == []:
-            dp = self.getDummyPointStamped()
-            for _ in range(10):
-                self.setpoint_pub.publish(dp)
-
-        self.goals.append((p.x, p.y))
-
-        gm = [cm.Position(x,self.height - y) for x,y in self.goals]
-        self.goal_pub.publish(gm)
-
-        ps = PointStamped()
-        ps.header.frame_id = "truck"
-        ps.point.x = p.x
-        ps.point.y = p.y
-        self.setpoint_pub.publish(ps)
-        self.goals = []
-
     def stateCallback(self, msg):
         x = msg.p.x
         y = msg.p.y
@@ -302,69 +115,224 @@ class Visualizer:
 
         self.truck_pub.publish(self.truck.header)
         self.truck_pub.publish(self.truck.trailer)
+    
+    def textCallback(self, data):
+        self.text = Marker()
+        self.text.text = data.data
+        self.text.header.frame_id = HEADER_FRAME
 
-    def pathCallback(self, data):
-        path = [(p.x, p.y) for p in data.path]
+        self.text.type = Marker.TEXT_VIEW_FACING
+        self.text.action = Marker.ADD
 
-        p = TruckPath(path, 30)
-        self.path_pub.publish(p.path_msg)
+        # 0 means that text is now immortal
+        self.text.lifetime = rospy.Duration(0)
         
-        dp = self.getDummyPath()
-        for _ in range(1):
-            self.possible_path_pub.publish(dp)
+        self.text.scale.z = 220
 
-    def refPathCallback(self, data):
-        path = [(p.x, p.y) for p in data.path]
-
-        self.path_pub.publish(self.getDummyPath())
-        self.trailer_path_pub.publish(self.getDummyPath())
-        self.long_path_pub.publish(self.getDummyPath())
-
-        p = TruckPath(path, 10)
-        self.ref_path_pub.publish(p.path_msg)
+        # sick blue color
+        # self.text.color.r = 0.1294117647
+        # self.text.color.g = 0.58823529411
+        # self.text.color.b = 0.95294117647
+        self.text.color.r = 1
+        self.text.color.g = 1
+        self.text.color.b = 1
+        self.text.color.a = 1
         
-    def longPathCallback(self, data):
-        path = [(p.x, p.y) for p in data.path]
-        path = spline(path, 0, len(path)*7)
+        self.text.pose.position.x = 0.0
+        self.text.pose.position.y = 0.0
+        self.text.pose.position.z = 110
+
+        self.text_pub.publish(self.text)
+    
+    def removeVisited(self):
         dp = self.getDummyPointStamped()
-
+       
         for _ in range(20):
             rospy.sleep(0.009)
             self.visited_pub.publish(dp)
         for _ in range(30):
+            
             rospy.sleep(0.009)
             self.tovisit_pub.publish(dp)
+        
+    def possiblePathCallback(self, data):
+        now = rospy.get_time()
+        if now - self.last_pos_path > 5:
+            self.removeVisited()
+                
+        self.last_pos_path = now
+        
+        
+        self.possible_path_pub.publish(self.getPath(data.path, 22, scaled=True))
+        
+    def getPointStamped(self, x, y):
+        s = PointStamped()
+        s.header.frame_id = HEADER_FRAME
+        s.point.x = x * self.scale
+        s.point.y = self.height - y * self.scale
+        return s
+        
+    def visitedCallback(self, data):
+        s = self.getPointStamped(data.x, data.y)
+        self.visited_pub.publish(s)
+    
+    def toVisitCallback(self, data):
+        s = self.getPointStamped(data.x, data.y)
+        self.tovisit_pub.publish(s)
+        
+    def removeSetPoints(self):
+        dp = self.getDummyPointStamped()
+        for _ in range(10):
+            self.setpoint_pub.publish(dp)
+            
+        
+    def initPoseCallback(self, data):
+        self.goals = []
+        po = data.pose.pose
+        q = po.orientation
+        p = po.position
+        
+        ts = TruckState()
+        ts.p = Position(p.x, self.height - p.y)
+        e = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        ts.theta1 = ts.theta2 = -e[2]
+        self.sim_reset_pub.publish(ts)
+        
+        self.long_path_pub.publish(self.getDummyPath())
+        self.ref_path_pub.publish(self.getDummyPath())
+        self.path_pub.publish(self.getDummyPath())
+        self.trailer_path_pub.publish(self.getDummyPath())
+        self.endpoint_pub.publish(self.getDummyPointStamped())
+        self.startpoint_pub.publish(self.getDummyPointStamped())
+        self.possible_path_pub.publish(self.getDummyPath())
+        self.removeSetPoints()
+        self.removeVisited()
+        
+        
+    def algStartEndCallback(self, data):
+        p = data.path
+        
+        s = self.getPointStamped(p[0].x, p[0].y)
+        self.startpoint_pub.publish(s)
+        
+        e = self.getPointStamped(p[1].x, p[1].y)
+        self.endpoint_pub.publish(e)
 
-        p = TruckPath(path, 20)
-        self.long_path_pub.publish(p.path_msg)
+    def mapUpdateHandler(self, data):
+        obst = data.data
+        add = self.map_obj.addObstacle(obst)
+        if not add:
+            rem = self.map_obj.removeObstacle(obst)
+            if not rem:
+                print "can't add or remove obstacle"
+                
+        m, s = self.map_obj.getMapAndScale()
+        oc, _ , _ = getOccupancyGrid(m, s)
+        self.map_pub.publish(oc)
+
+    def getDummyPoseStamped(self):
+        ps = PoseStamped()
+        ps.header.frame_id = HEADER_FRAME
+        ps.pose.position.z = 5000
+        return ps
+    
+    def getDummyPath(self):
+        p = Path()
+        p.header.frame_id = HEADER_FRAME
+        p.poses.append(self.getDummyPoseStamped())
+        return p
+        
+    def getDummyPointStamped(self):
+        p = PointStamped()
+        p.header.frame_id = HEADER_FRAME
+        p.point.z = 5000
+        return p
+
+    def pointClickedCallback(self, data):
+        p = data.point
+
+        if self.goals == []:
+            self.removeSetPoints()
+
+        self.goals.append((p.x, p.y))
+
+        self.setpoint_pub.publish(data)
+
+    def goalPointCallback(self, data):
+        p = data.pose.position
+        self.tp = []
+        
+        self.removeVisited()
+        self.possible_path_pub.publish(self.getDummyPath())
+        if self.goals == []:
+            self.removeSetPoints()
+
+        self.goals.append((p.x, p.y))
+
+        gm = [cm.Position(x,self.height - y) for x,y in self.goals]
+        self.goal_pub.publish(gm)
+
+        ps = PointStamped()
+        ps.header.frame_id = HEADER_FRAME
+        ps.point.x = p.x
+        ps.point.y = p.y
+        self.setpoint_pub.publish(ps)
+        self.goals = []
+
+    
+
+    def pathCallback(self, data):
+        p = self.getPath(data.path, 30)
+        self.path_pub.publish(p)
+        
+        self.possible_path_pub.publish(self.getDummyPath())
+
+    def refPathCallback(self, data):
+        
+        p = self.getPath(data.path, 10)
+        self.ref_path_pub.publish(p)
+        
+    def longPathCallback(self, data):
+        
+        self.removeVisited()
+        p = self.getPath(data.path, 20, splined=True)
+        self.long_path_pub.publish(p)
 
     def trailerPathCallback(self, data):
-        path = [(p.x, p.y) for p in data.path]
-        path = spline(path, 0, len(path)*7)
-
-        p = TruckPath(path, 30)
-        self.trailer_path_pub.publish(p.path_msg)
-
-class TruckPath:
-    def __init__(self, path, z):
-        self.path_msg = Path()
-        self.path_msg.header.frame_id = 'truck'
+        p = self.getPath(data.path, 25, splined=True)
+        
+        self.trailer_path_pub.publish(p)
+        
+    def getPath(self, dp, z, splined=False, scaled=False):
+        scale = 1
+        if scaled:
+            scale = self.scale
+        
+        path = [(p.x * scale, p.y * scale) for p in dp]
+        
+        if splined:
+            path = spline(path, 0, len(path)*7)
+        
+        path_msg = Path()
+        path_msg.header.frame_id = HEADER_FRAME
 
         for x,y in path:
-            posestmpd = PoseStamped()
+            ps = PoseStamped()
 
-            posestmpd.header.frame_id = 'truck'
+            ps.header.frame_id = HEADER_FRAME
 
-            posestmpd.pose.position.x = x
-            posestmpd.pose.position.y = 9650-y
-            posestmpd.pose.position.z = z
+            ps.pose.position.x = x
+            ps.pose.position.y = self.height - y
+            ps.pose.position.z = z
 
-            posestmpd.pose.orientation.w = 0.0
-            posestmpd.pose.orientation.x = 0.0
-            posestmpd.pose.orientation.y = 0.0
-            posestmpd.pose.orientation.z = 0.0
+            ps.pose.orientation.w = 0.0
+            ps.pose.orientation.x = 0.0
+            ps.pose.orientation.y = 0.0
+            ps.pose.orientation.z = 0.0
 
-            self.path_msg.poses.append(posestmpd)
+            path_msg.poses.append(ps)
+        return path_msg
+
 
 class TruckModel:
     def __init__(self):
@@ -382,11 +350,11 @@ class TruckModel:
         
         # Create the header marker, and set a static frame
         self.header = Marker()
-        self.header.header.frame_id = "truck"
+        self.header.header.frame_id = HEADER_FRAME
         #self.header.header.stamp = rospy.Time.now()
 
         # Set the namespace and id of the header, making it unique
-        self.header.ns = "truck"
+        self.header.ns = HEADER_FRAME
         self.header.id = 1
 
         self.header.type = Marker.CUBE
@@ -469,41 +437,42 @@ class TruckModel:
         self.header.pose.orientation.z = quat[2]
         self.header.pose.orientation.w = quat[3]
 
-class MapModel:
-    def __init__(self, map_obj):
+    
         
-        stamp = rospy.Time.now()
+        
+def getOccupancyGrid(matrix, scale):
+    stamp = rospy.Time.now()
 
-        self.map = OccupancyGrid()
-        self.map.header.frame_id = "truck"
-        self.map.header.stamp = stamp
+    oc = OccupancyGrid()
+    oc.header.frame_id = HEADER_FRAME
+    oc.header.stamp = stamp
 
-        # The time at which the map was loaded
-        load_time = stamp
-        
-        # The origin of the map [m, m, rad].  This is the real-world pose of the
-        # cell (0,0) in the map.
-        origin = Pose(Point(0,0,0), Quaternion(0,0,0,0))
+    # The time at which the map was loaded
+    load_time = stamp
+    
+    # The origin of the map [m, m, rad].  This is the real-world pose of the
+    # cell (0,0) in the map.
+    origin = Pose(Point(0,0,0), Quaternion(0,0,0,0))
 
-        mapFromImg, self.resolution = map_obj.getMapAndScale()
-        
-        mapFromImg = mapFromImg[::-1]
-        
-        self.width = len(mapFromImg[0])
-        self.height = len(mapFromImg)
-        
-        self.map.info = MapMetaData(load_time, self.resolution, self.width, self.height, origin)
-        
-        for row in range(self.height):
-            for col in range(self.width):
-                c = mapFromImg[row][col]
-                if c == 0:
-                    self.map.data.append(100)
-                elif c == 1:
-                    self.map.data.append(0)
-                    
-                else:
-                    self.map.data.append(50)
+    matrix = matrix[::-1]
+    
+    width = len(matrix[0])
+    height = len(matrix)
+    
+    oc.info = MapMetaData(load_time, scale, width, height, origin)
+    
+    for row in range(height):
+        for col in range(width):
+            c = matrix[row][col]
+            if c == 0:
+                oc.data.append(100)
+            elif c == 1:
+                oc.data.append(0)
+                
+            else:
+                oc.data.append(50)
+    return oc, width * scale, height * scale
+
 
 if __name__=="__main__":
     Visualizer()
