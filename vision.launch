@@ -1,0 +1,6 @@
+<launch>
+
+<node name= "visualization" pkg= "truck_visualization" type="visualization.py"/>
+<node name="rviz" pkg="rviz" type="rviz" args="-d $(find truck_visualization)/config.rviz" />
+  
+</launch>
