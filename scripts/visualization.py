@@ -4,8 +4,8 @@ Copyright (c) 2017, Lars Niklasson
 Copyright (c) 2017, Filip Slottner Seholm
 Copyright (c) 2017, Fanny Sandblom
 Copyright (c) 2017, Kevin Hoogendijk
-Copyright (c) 2017, Nils Andrén
-Copyright (c) 2017, Alicia Gil Martín
+Copyright (c) 2017, Nils Andren
+Copyright (c) 2017, Alicia Gil Martin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
